@@ -85,7 +85,7 @@ class ListTargetsDatatableViewSet(viewsets.ModelViewSet):
 
 
 			if _order_direction == 'desc':
-				order_col = '-{}'.format(order_col)
+				order_col = f'-{order_col}'
 
 			qs = self.queryset.filter(
 				Q(name__icontains=search_value) |
@@ -102,20 +102,14 @@ class WafDetector(APIView):
 	def get(self, request):
 		req = self.request
 		url= req.query_params.get('url')
-		response = {}
-		response['status'] = False
-
-		wafw00f_command = 'wafw00f {}'.format(
-			url
-		)
+		response = {'status': False}
+		wafw00f_command = f'wafw00f {url}'
 		output = subprocess.check_output(wafw00f_command, shell=True)
 		# use regex to get the waf
 		regex = "behind \\\\x1b\[1;96m(.*)\\\\x1b"
-		group = re.search(regex, str(output))
-
-		if group:
+		if group := re.search(regex, str(output)):
 			response['status'] = True
-			response['results'] = group.group(1)
+			response['results'] = group[1]
 		else:
 			response['message'] = 'Could not detect any WAF!'
 
@@ -126,12 +120,8 @@ class SearchHistoryView(APIView):
 	def get(self, request):
 		req = self.request
 
-		response = {}
-		response['status'] = False
-
-		scan_history = SearchHistory.objects.all().order_by('-id')[:5]
-
-		if scan_history:
+		response = {'status': False}
+		if scan_history := SearchHistory.objects.all().order_by('-id')[:5]:
 			response['status'] = True
 			response['results'] = SearchHistorySerializer(scan_history, many=True).data
 
@@ -143,9 +133,7 @@ class UniversalSearch(APIView):
 		req = self.request
 		query = req.query_params.get('query')
 
-		response = {}
-		response['status'] = False
-
+		response = {'status': False}
 		if not query:
 			response['message'] = 'No query parameter provided!'
 			return Response(response)
@@ -200,33 +188,20 @@ class FetchMostCommonVulnerability(APIView):
 		target_id = data.get('target_id')
 		is_ignore_info = data.get('ignore_info', False)
 
-		response = {}
-		response['status'] = False
-
+		response = {'status': False}
 		if scan_history_id:
-			if is_ignore_info:
-				most_common_vulnerabilities = Vulnerability.objects.filter(
-					scan_history__id=scan_history_id
-				).values(
-					"name", "severity"
-				).exclude(
-					severity=0
-				).annotate(
-					count=Count('name')
-				).order_by(
-					"-count"
-				)[:limit]
-			else:
-				most_common_vulnerabilities = Vulnerability.objects.filter(
-					scan_history__id=scan_history_id
-				).values(
-					"name", "severity"
-				).annotate(
-					count=Count('name')
-				).order_by(
-					"-count"
-				)[:limit]
-
+			most_common_vulnerabilities = (
+				Vulnerability.objects.filter(scan_history__id=scan_history_id)
+				.values("name", "severity")
+				.exclude(severity=0)
+				.annotate(count=Count('name'))
+				.order_by("-count")[:limit]
+				if is_ignore_info
+				else Vulnerability.objects.filter(scan_history__id=scan_history_id)
+				.values("name", "severity")
+				.annotate(count=Count('name'))
+				.order_by("-count")[:limit]
+			)
 		elif target_id:
 			if is_ignore_info:
 				most_common_vulnerabilities = Vulnerability.objects.filter(
@@ -251,30 +226,27 @@ class FetchMostCommonVulnerability(APIView):
 					"-count"
 				)[:limit]
 
+		elif is_ignore_info:
+			most_common_vulnerabilities = Vulnerability.objects.values(
+				"name", "severity"
+			).exclude(
+				severity=0
+			).annotate(
+				count=Count('name')
+			).order_by(
+				"-count"
+			)[:limit]
 		else:
-			if is_ignore_info:
-				most_common_vulnerabilities = Vulnerability.objects.values(
-					"name", "severity"
-				).exclude(
-					severity=0
-				).annotate(
-					count=Count('name')
-				).order_by(
-					"-count"
-				)[:limit]
-			else:
-				most_common_vulnerabilities = Vulnerability.objects.values(
-					"name", "severity"
-				).annotate(
-					count=Count('name')
-				).order_by(
-					"-count"
-				)[:limit]
+			most_common_vulnerabilities = Vulnerability.objects.values(
+				"name", "severity"
+			).annotate(
+				count=Count('name')
+			).order_by(
+				"-count"
+			)[:limit]
 
 
-		most_common_vulnerabilities = [vuln for vuln in most_common_vulnerabilities]
-
-		if most_common_vulnerabilities:
+		if most_common_vulnerabilities := list(most_common_vulnerabilities):
 			response['status'] = True
 			response['result'] = most_common_vulnerabilities
 
@@ -291,9 +263,7 @@ class FetchMostVulnerable(APIView):
 		limit = data.get('limit', 20)
 		is_ignore_info = data.get('ignore_info', False)
 
-		response = {}
-		response['status'] = False
-
+		response = {'status': False}
 		if scan_history_id:
 			if is_ignore_info:
 				most_vulnerable_subdomains = Subdomain.objects.filter(
@@ -367,15 +337,16 @@ class CVEDetails(APIView):
 		if not cve_id:
 			return Response({'status': False, 'message': 'CVE ID not provided'})
 
-		response = requests.get('https://cve.circl.lu/api/cve/' + cve_id)
+		response = requests.get(f'https://cve.circl.lu/api/cve/{cve_id}')
 
 		if response.status_code != 200:
 			return  Response({'status': False, 'message': 'Unknown Error Occured!'})
 
-		if not response.json():
-			return  Response({'status': False, 'message': 'CVE ID does not exists.'})
-
-		return Response({'status': True, 'result': response.json()})
+		return (
+			Response({'status': True, 'result': response.json()})
+			if response.json()
+			else Response({'status': False, 'message': 'CVE ID does not exists.'})
+		)
 
 
 class AddReconNote(APIView):
@@ -480,7 +451,9 @@ class FetchSubscanResults(APIView):
 		subscan_id = data['subscan_id']
 
 		if not SubScan.objects.filter(id=subscan_id).exists():
-			return Response({'status': False, 'error': 'Subscan {} does not exist'.format(subscan_id)})
+			return Response(
+				{'status': False, 'error': f'Subscan {subscan_id} does not exist'}
+			)
 
 		subscan = SubScan.objects.filter(id=subscan_id)
 		subscan_data = SubScanResultSerializer(subscan[0], many=False).data
@@ -518,9 +491,7 @@ class ListSubScans(APIView):
 
 		domain_id = data.get('domain_id', None)
 
-		response = {}
-
-		response['status'] = False
+		response = {'status': False}
 
 		if subdomain_id:
 			subscans = SubScan.objects.filter(subdomain__id=subdomain_id).order_by('-stop_scan_date')
@@ -668,12 +639,10 @@ class RengineUpdateCheck(APIView):
 	def get(self, request):
 		req = self.request
 		github_api = \
-			'https://api.github.com/repos/yogeshojha/rengine/releases'
+				'https://api.github.com/repos/yogeshojha/rengine/releases'
 		response = requests.get(github_api).json()
 		if 'message' in response:
 			return Response({'status': False, 'message': 'RateLimited'})
-
-		return_response = {}
 
 		# get current version_number
 		# remove quotes from current_version
@@ -688,7 +657,7 @@ class RengineUpdateCheck(APIView):
 								   ])[1:] if response[0]['name'][0] == 'v'
 									else response[0]['name']))
 
-		latest_version = latest_version.group(0) if latest_version else None
+		latest_version = latest_version[0] if latest_version else None
 
 		if not latest_version:
 			latest_version = re.search(r'(\d+\.)?(\d+\.)?(\*|\d+)',
@@ -696,12 +665,15 @@ class RengineUpdateCheck(APIView):
 										])[1:] if response[0]['name'][0]
 										== 'v' else response[0]['name']))
 			if latest_version:
-				latest_version = latest_version.group(0)
+				latest_version = latest_version[0]
 
-		return_response['status'] = True
-		return_response['latest_version'] = latest_version
-		return_response['current_version'] = current_version
-		return_response['update_available'] = version.parse(current_version) < version.parse(latest_version)
+		return_response = {
+			'status': True,
+			'latest_version': latest_version,
+			'current_version': current_version,
+			'update_available': version.parse(current_version)
+			< version.parse(latest_version),
+		}
 		if version.parse(current_version) < version.parse(latest_version):
 			return_response['changelog'] = response[0]['body']
 
@@ -730,11 +702,11 @@ class UninstallTool(APIView):
 
 		if 'go install' in tool.install_command:
 			tool_name = tool.install_command.split('/')[-1].split('@')[0]
-			uninstall_command = 'rm /go/bin/' + tool_name
+			uninstall_command = f'rm /go/bin/{tool_name}'
 		elif 'git clone' in tool.install_command:
 			tool_name = tool.install_command[:-1] if tool.install_command[-1] == '/' else tool.install_command
 			tool_name = tool_name.split('/')[-1]
-			uninstall_command = 'rm -rf ' + tool.github_clone_path
+			uninstall_command = f'rm -rf {tool.github_clone_path}'
 		else:
 			return Response({'status': False, 'message': 'Cannot uninstall tool!'})
 
@@ -763,15 +735,22 @@ class UpdateTool(APIView):
 		update_command = tool.update_command.lower()
 
 		if not update_command:
-			return Response({'status': False, 'message': tool.name + 'has missing update command! Cannot update the tool.'})
+			return Response(
+				{
+					'status': False,
+					'message': f'{tool.name}has missing update command! Cannot update the tool.',
+				}
+			)
 		elif update_command == 'git pull':
 			tool_name = tool.install_command[:-1] if tool.install_command[-1] == '/' else tool.install_command
 			tool_name = tool_name.split('/')[-1]
-			update_command = 'cd /usr/src/github/' + tool_name + ' && git pull && cd -'
+			update_command = f'cd /usr/src/github/{tool_name} && git pull && cd -'
 
 		os.system(update_command)
 		run_system_commands.apply_async(args=(update_command,))
-		return Response({'status': True, 'message': tool.name + ' upated successfully.'})
+		return Response(
+			{'status': True, 'message': f'{tool.name} upated successfully.'}
+		)
 
 
 class GetExternalToolCurrentVersion(APIView):
@@ -803,10 +782,19 @@ class GetExternalToolCurrentVersion(APIView):
 			if version_number:
 				break
 
-		if not version_number:
-			return Response({'status': False, 'message': 'Invalid version lookup command.'})
-
-		return Response({'status': True, 'version_number': version_number.group(0), 'tool_name': tool.name})
+		return (
+			Response(
+				{
+					'status': True,
+					'version_number': version_number.group(0),
+					'tool_name': tool.name,
+				}
+			)
+			if version_number
+			else Response(
+				{'status': False, 'message': 'Invalid version lookup command.'}
+			)
+		)
 
 
 
@@ -831,13 +819,14 @@ class GithubToolCheckGetLatestRelease(APIView):
 		# if tool_github_url has https://github.com/ remove and also remove trailing /
 		tool_github_url = tool.github_url.replace('http://github.com/', '').replace('https://github.com/', '')
 		tool_github_url = remove_lead_and_trail_slash(tool_github_url)
-		github_api = 'https://api.github.com/repos/{}/releases'.format(tool_github_url)
+		github_api = f'https://api.github.com/repos/{tool_github_url}/releases'
 		response = requests.get(github_api).json()
 		# check if api rate limit exceeded
-		if 'message' in response and response['message'] == 'RateLimited':
-			return Response({'status': False, 'message': 'RateLimited'})
-		elif 'message' in response and response['message'] == 'Not Found':
-			return Response({'status': False, 'message': 'Not Found'})
+		if 'message' in response:
+			if response['message'] == 'RateLimited':
+				return Response({'status': False, 'message': 'RateLimited'})
+			elif response['message'] == 'Not Found':
+				return Response({'status': False, 'message': 'Not Found'})
 		# only send latest release
 		response = response[0]
 
@@ -888,13 +877,14 @@ class Whois(APIView):
 		ip_domain = req.query_params.get('ip_domain')
 		if not validators.domain(ip_domain):
 			return Response({'status': False, 'message': 'Invalid Domain or IP'})
-		save_db = True if 'save_db' in req.query_params else False
+		save_db = 'save_db' in req.query_params
 		# fetch_from_db query param can be used to pull the whois record directly from db
 		# instead of fetching new
 		# if fetch_from_db = True, will not be queried to domainbigdata
-		fetch_from_db = True if 'fetch_from_db' in req.query_params else False
-		response = get_whois(ip_domain, save_db=save_db, fetch_from_db=fetch_from_db)
-		if response:
+		fetch_from_db = 'fetch_from_db' in req.query_params
+		if response := get_whois(
+			ip_domain, save_db=save_db, fetch_from_db=fetch_from_db
+		):
 			return Response(response)
 		return Response({'status': False})
 
@@ -915,8 +905,7 @@ class CMSDetector(APIView):
 class IPToDomain(APIView):
 	def get(self, request):
 		req = self.request
-		ip_address = req.query_params.get('ip_address')
-		if ip_address:
+		if ip_address := req.query_params.get('ip_address'):
 			options = FirefoxOptions()
 			options.add_argument("--headless")
 			driver = webdriver.Firefox(options=options)
@@ -924,9 +913,9 @@ class IPToDomain(APIView):
 			# ip address may contain ip or CIDR, for ip use ip for CIDR use address
 			# as /net
 			if '/' in ip_address:
-				driver.get('https://bgp.he.net/net/{}#_dns'.format(ip_address))
+				driver.get(f'https://bgp.he.net/net/{ip_address}#_dns')
 			else:
-				driver.get('https://bgp.he.net/ip/{}#_dns'.format(ip_address))
+				driver.get(f'https://bgp.he.net/ip/{ip_address}#_dns')
 
 			try:
 				element = WebDriverWait(driver, 30).until(
@@ -952,15 +941,14 @@ class IPToDomain(APIView):
 				whois_button = driver.find_element_by_xpath("//li[@id='tab_whois']")
 				whois_button.click()
 
-				whois_element = driver.find_element_by_xpath("//div[@id='whois']/pre")
-				if whois_element:
+				if whois_element := driver.find_element_by_xpath("//div[@id='whois']/pre"):
 					response['whois'] = whois_element.text
 			except Exception as e:
 				logging.error(e)
 				response = {
 					'status': False,
 					'ip_address': ip_address,
-					'message': 'Exception {}'.format(e)
+					'message': f'Exception {e}',
 				}
 			finally:
 				driver.quit()
@@ -983,13 +971,11 @@ class GetFileContents(APIView):
 		req = self.request
 		name = req.query_params.get('name')
 
-		response = {}
-		response['status'] = False
-
+		response = {'status': False}
 		if 'nuclei_config' in req.query_params:
 			path = "/root/.config/nuclei/config.yaml"
 			if not os.path.exists(path):
-				os.system('touch {}'.format(path))
+				os.system(f'touch {path}')
 				response['message'] = 'File Created!'
 			f = open(path, "r")
 			response['status'] = True
@@ -999,7 +985,7 @@ class GetFileContents(APIView):
 		if 'subfinder_config' in req.query_params:
 			path = "/root/.config/subfinder/config.yaml"
 			if not os.path.exists(path):
-				os.system('touch {}'.format(path))
+				os.system(f'touch {path}')
 				response['message'] = 'File Created!'
 			f = open(path, "r")
 			response['status'] = True
@@ -1009,7 +995,7 @@ class GetFileContents(APIView):
 		if 'naabu_config' in req.query_params:
 			path = "/root/.config/naabu/config.yaml"
 			if not os.path.exists(path):
-				os.system('touch {}'.format(path))
+				os.system(f'touch {path}')
 				response['message'] = 'File Created!'
 			f = open(path, "r")
 			response['status'] = True
@@ -1019,7 +1005,7 @@ class GetFileContents(APIView):
 		if 'theharvester_config' in req.query_params:
 			path = "/usr/src/github/theHarvester/api-keys.yaml"
 			if not os.path.exists(path):
-				os.system('touch {}'.format(path))
+				os.system(f'touch {path}')
 				response['message'] = 'File Created!'
 			f = open(path, "r")
 			response['status'] = True
@@ -1029,7 +1015,7 @@ class GetFileContents(APIView):
 		if 'amass_config' in req.query_params:
 			path = "/root/.config/amass.ini"
 			if not os.path.exists(path):
-				os.system('touch {}'.format(path))
+				os.system(f'touch {path}')
 				response['message'] = 'File Created!'
 			f = open(path, "r")
 			response['status'] = True
@@ -1038,7 +1024,7 @@ class GetFileContents(APIView):
 
 		if 'gf_pattern' in req.query_params:
 			basedir = '/root/.gf'
-			path = '/root/.gf/{}.json'.format(name)
+			path = f'/root/.gf/{name}.json'
 			if is_safe_path(basedir, path) and os.path.exists(path):
 				content = open(path, "r").read()
 				response['status'] = True
@@ -1051,7 +1037,7 @@ class GetFileContents(APIView):
 
 		if 'nuclei_template' in req.query_params:
 			safe_dir = '/root/nuclei-templates'
-			path = '/root/nuclei-templates/{}'.format(name)
+			path = f'/root/nuclei-templates/{name}'
 			if is_safe_path(safe_dir, path) and os.path.exists(path):
 				content = open(path.format(name), "r").read()
 				response['status'] = True
@@ -1131,8 +1117,7 @@ class ListTargetsWithoutOrganization(APIView):
 class VisualiseData(APIView):
 	def get(self, request, format=None):
 		req = self.request
-		scan_id = req.query_params.get('scan_id')
-		if scan_id:
+		if scan_id := req.query_params.get('scan_id'):
 			mitch_data = ScanHistory.objects.filter(id=scan_id)
 			serializer = VisualiseDataSerializer(mitch_data, many=True)
 			return Response(serializer.data)
@@ -1144,53 +1129,43 @@ class ListTechnology(APIView):
 	def get(self, request, format=None):
 		req = self.request
 		scan_id = req.query_params.get('scan_id')
-		target_id = req.query_params.get('target_id')
-
-		if target_id:
+		if target_id := req.query_params.get('target_id'):
 			tech = Technology.objects.filter(
 				technologies__in=Subdomain.objects.filter(
 					target_domain__id=target_id)).annotate(
 				count=Count('name')).order_by('-count')
-			serializer = TechnologyCountSerializer(tech, many=True)
-			return Response({"technologies": serializer.data})
 		elif scan_id:
 			tech = Technology.objects.filter(
 				technologies__in=Subdomain.objects.filter(
 					scan_history__id=scan_id)).annotate(
 				count=Count('name')).order_by('-count')
-			serializer = TechnologyCountSerializer(tech, many=True)
-			return Response({"technologies": serializer.data})
 		else:
 			tech = Technology.objects.filter(
 				technologies__in=Subdomain.objects.all()).annotate(
 				count=Count('name')).order_by('-count')
-			serializer = TechnologyCountSerializer(tech, many=True)
-			return Response({"technologies": serializer.data})
+		serializer = TechnologyCountSerializer(tech, many=True)
+		return Response({"technologies": serializer.data})
 
 
 class ListDorkTypes(APIView):
 	def get(self, request, format=None):
 		req = self.request
-		scan_id = req.query_params.get('scan_id')
-		if scan_id:
+		if scan_id := req.query_params.get('scan_id'):
 			dork = Dork.objects.filter(
 				dorks__in=ScanHistory.objects.filter(id=scan_id)
 			).values('type').annotate(count=Count('type')).order_by('-count')
-			serializer = DorkCountSerializer(dork, many=True)
-			return Response({"dorks": serializer.data})
 		else:
 			dork = Dork.objects.filter(
 				dorks__in=ScanHistory.objects.all()
 			).values('type').annotate(count=Count('type')).order_by('-count')
-			serializer = DorkCountSerializer(dork, many=True)
-			return Response({"dorks": serializer.data})
+		serializer = DorkCountSerializer(dork, many=True)
+		return Response({"dorks": serializer.data})
 
 
 class ListEmails(APIView):
 	def get(self, request, format=None):
 		req = self.request
-		scan_id = req.query_params.get('scan_id')
-		if scan_id:
+		if scan_id := req.query_params.get('scan_id'):
 			email = Email.objects.filter(
 				emails__in=ScanHistory.objects.filter(id=scan_id)).order_by('password')
 			serializer = EmailSerializer(email, many=True)
@@ -1217,8 +1192,7 @@ class ListDorks(APIView):
 class ListEmployees(APIView):
 	def get(self, request, format=None):
 		req = self.request
-		scan_id = req.query_params.get('scan_id')
-		if scan_id:
+		if scan_id := req.query_params.get('scan_id'):
 			employee = Employee.objects.filter(
 				employees__in=ScanHistory.objects.filter(id=scan_id))
 			serializer = EmployeeSerializer(employee, many=True)
@@ -1298,12 +1272,9 @@ class ListSubdomains(APIView):
 
 		subdomain_ids = data.get('subdomain_ids')
 
-		subdomain_names = []
-
-		for id in subdomain_ids:
-			subdomain_names.append(Subdomain.objects.get(id=id).name)
-
-		if subdomain_names:
+		if subdomain_names := [
+			Subdomain.objects.get(id=id).name for id in subdomain_ids
+		]:
 			return Response({'status': True, "results": subdomain_names})
 
 		return Response({'status': False})
@@ -1313,8 +1284,7 @@ class ListSubdomains(APIView):
 class ListOsintUsers(APIView):
 	def get(self, request, format=None):
 		req = self.request
-		scan_id = req.query_params.get('scan_id')
-		if scan_id:
+		if scan_id := req.query_params.get('scan_id'):
 			documents = MetaFinderDocument.objects.filter(scan_history__id=scan_id).exclude(author__isnull=True).values('author').distinct()
 			serializer = MetafinderUserSerializer(documents, many=True)
 			return Response({"users": serializer.data})
@@ -1323,8 +1293,7 @@ class ListOsintUsers(APIView):
 class ListMetadata(APIView):
 	def get(self, request, format=None):
 		req = self.request
-		scan_id = req.query_params.get('scan_id')
-		if scan_id:
+		if scan_id := req.query_params.get('scan_id'):
 			documents = MetaFinderDocument.objects.filter(scan_history__id=scan_id).distinct()
 			serializer = MetafinderDocumentSerializer(documents, many=True)
 			return Response({"metadata": serializer.data})
@@ -1366,9 +1335,7 @@ class IpAddressViewSet(viewsets.ModelViewSet):
 
 	def get_queryset(self):
 		req = self.request
-		scan_id = req.query_params.get('scan_id')
-
-		if scan_id:
+		if scan_id := req.query_params.get('scan_id'):
 			self.queryset = Subdomain.objects.filter(
 				scan_history__id=scan_id).exclude(
 				ip_addresses__isnull=True).distinct()
@@ -1390,8 +1357,7 @@ class SubdomainsViewSet(viewsets.ModelViewSet):
 
 	def get_queryset(self):
 		req = self.request
-		scan_id = req.query_params.get('scan_id')
-		if scan_id:
+		if scan_id := req.query_params.get('scan_id'):
 			if 'only_screenshot' in self.request.query_params:
 				return Subdomain.objects.filter(
 					scan_history__id=scan_id).exclude(
@@ -1571,7 +1537,7 @@ class InterestingSubdomainViewSet(viewsets.ModelViewSet):
 			order_col = 'content_length'
 
 		if _order_direction == 'desc':
-			order_col = '-{}'.format(order_col)
+			order_col = f'-{order_col}'
 
 		if search_value:
 			qs = self.queryset.filter(
@@ -1661,16 +1627,16 @@ class SubdomainDatatableViewSet(viewsets.ModelViewSet):
 			order_col = 'checked'
 		elif _order_col == '1':
 			order_col = 'name'
+		elif _order_col == '10':
+			order_col = 'response_time'
 		elif _order_col == '4':
 			order_col = 'http_status'
 		elif _order_col == '5':
 			order_col = 'page_title'
 		elif _order_col == '8':
 			order_col = 'content_length'
-		elif _order_col == '10':
-			order_col = 'response_time'
 		if _order_direction == 'desc':
-			order_col = '-{}'.format(order_col)
+			order_col = f'-{order_col}'
 		# if the search query is separated by = means, it is a specific lookup
 		# divide the search query into two half and lookup
 		if search_value:
@@ -1938,7 +1904,7 @@ class EndPointViewSet(viewsets.ModelViewSet):
 			elif _order_col == '9':
 				order_col = 'response_time'
 			if _order_direction == 'desc':
-				order_col = '-{}'.format(order_col)
+				order_col = f'-{order_col}'
 			# if the search query is separated by = means, it is a specific lookup
 			# divide the search query into two half and lookup
 			if '=' in search_value or '&' in search_value or '|' in search_value or '>' in search_value or '<' in search_value or '!' in search_value:
@@ -1960,17 +1926,16 @@ class EndPointViewSet(viewsets.ModelViewSet):
 			return qs.order_by(order_col)
 		return qs
 	def general_lookup(self, search_value):
-		qs = self.queryset.filter(
-			Q(http_url__icontains=search_value) |
-			Q(page_title__icontains=search_value) |
-			Q(http_status__icontains=search_value) |
-			Q(content_type__icontains=search_value) |
-			Q(webserver__icontains=search_value) |
-			Q(technologies__name__icontains=search_value) |
-			Q(content_type__icontains=search_value) |
-			Q(matched_gf_patterns__icontains=search_value))
-
-		return qs
+		return self.queryset.filter(
+			Q(http_url__icontains=search_value)
+			| Q(page_title__icontains=search_value)
+			| Q(http_status__icontains=search_value)
+			| Q(content_type__icontains=search_value)
+			| Q(webserver__icontains=search_value)
+			| Q(technologies__name__icontains=search_value)
+			| Q(content_type__icontains=search_value)
+			| Q(matched_gf_patterns__icontains=search_value)
+		)
 
 	def special_lookup(self, search_value):
 		qs = self.queryset.filter()
@@ -2149,7 +2114,7 @@ class VulnerabilityViewSet(viewsets.ModelViewSet):
 		_order_direction = self.request.GET.get(u'order[0][dir]', None)
 		if search_value or _order_col or _order_direction:
 			order_col = 'severity'
-			if _order_col == '0' or _order_col == '14':
+			if _order_col in ['0', '14']:
 				order_col = 'open_status'
 			elif _order_col == '1':
 				order_col = 'type'
@@ -2164,7 +2129,7 @@ class VulnerabilityViewSet(viewsets.ModelViewSet):
 			elif _order_col == '13':
 				order_col = 'discovered_date'
 			if _order_direction == 'desc':
-				order_col = '-{}'.format(order_col)
+				order_col = f'-{order_col}'
 			# if the search query is separated by = means, it is a specific lookup
 			# divide the search query into two half and lookup
 			if '=' in search_value or '&' in search_value or '|' in search_value or '>' in search_value or '<' in search_value or '!' in search_value:
@@ -2187,25 +2152,25 @@ class VulnerabilityViewSet(viewsets.ModelViewSet):
 		return qs.order_by('-severity')
 
 	def general_lookup(self, search_value):
-		qs = self.queryset.filter(
-			Q(http_url__icontains=search_value) |
-			Q(target_domain__name__icontains=search_value) |
-			Q(template__icontains=search_value) |
-			Q(template_id__icontains=search_value) |
-			Q(name__icontains=search_value) |
-			Q(severity__icontains=search_value) |
-			Q(description__icontains=search_value) |
-			Q(extracted_results__icontains=search_value) |
-			Q(references__url__icontains=search_value) |
-			Q(cve_ids__name__icontains=search_value) |
-			Q(cwe_ids__name__icontains=search_value) |
-			Q(cvss_metrics__icontains=search_value) |
-			Q(cvss_score__icontains=search_value) |
-			Q(type__icontains=search_value) |
-			Q(open_status__icontains=search_value) |
-			Q(hackerone_report_id__icontains=search_value) |
-			Q(tags__name__icontains=search_value))
-		return qs
+		return self.queryset.filter(
+			Q(http_url__icontains=search_value)
+			| Q(target_domain__name__icontains=search_value)
+			| Q(template__icontains=search_value)
+			| Q(template_id__icontains=search_value)
+			| Q(name__icontains=search_value)
+			| Q(severity__icontains=search_value)
+			| Q(description__icontains=search_value)
+			| Q(extracted_results__icontains=search_value)
+			| Q(references__url__icontains=search_value)
+			| Q(cve_ids__name__icontains=search_value)
+			| Q(cwe_ids__name__icontains=search_value)
+			| Q(cvss_metrics__icontains=search_value)
+			| Q(cvss_score__icontains=search_value)
+			| Q(type__icontains=search_value)
+			| Q(open_status__icontains=search_value)
+			| Q(hackerone_report_id__icontains=search_value)
+			| Q(tags__name__icontains=search_value)
+		)
 
 	def special_lookup(self, search_value):
 		qs = self.queryset.filter()

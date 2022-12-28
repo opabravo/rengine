@@ -54,12 +54,10 @@ def get_interesting_subdomains(scan_history=None, target=None):
                 subdomain_lookup_query |= Q(name__icontains=key)
             if InterestingLookupModel.objects.filter(
                     custom_type=True).order_by('-id')[0].title_lookup:
-                page_title_lookup_query |= Q(
-                    page_title__iregex="\\y{}\\y".format(key))
+                page_title_lookup_query |= Q(page_title__iregex=f"\\y{key}\\y")
         else:
             subdomain_lookup_query |= Q(name__icontains=key)
-            page_title_lookup_query |= Q(
-                page_title__iregex="\\y{}\\y".format(key))
+            page_title_lookup_query |= Q(page_title__iregex=f"\\y{key}\\y")
 
     if InterestingLookupModel.objects.filter(
             custom_type=True) and InterestingLookupModel.objects.filter(
@@ -87,8 +85,7 @@ def get_interesting_subdomains(scan_history=None, target=None):
             subdomain_lookup = Subdomain.objects.filter(subdomain_lookup_query)
         if page_title_lookup_query:
             title_lookup = Subdomain.objects.filter(page_title_lookup_query)
-    lookup = subdomain_lookup | title_lookup
-    return lookup
+    return subdomain_lookup | title_lookup
 
 
 def get_interesting_endpoint(scan_history=None, target=None):
@@ -102,11 +99,11 @@ def get_interesting_endpoint(scan_history=None, target=None):
             if InterestingLookupModel.objects.filter(custom_type=True).order_by('-id')[0].url_lookup:
                 url_lookup_query |= Q(http_url__icontains=key)
             if InterestingLookupModel.objects.filter(custom_type=True).order_by('-id')[0].title_lookup:
-                page_title_lookup_query |= Q(page_title__iregex="\\y{}\\y".format(key))
+                page_title_lookup_query |= Q(page_title__iregex=f"\\y{key}\\y")
 
         else:
             url_lookup_query |= Q(http_url__icontains=key)
-            page_title_lookup_query |= Q(page_title__iregex="\\y{}\\y".format(key))
+            page_title_lookup_query |= Q(page_title__iregex=f"\\y{key}\\y")
 
     if InterestingLookupModel.objects.filter(custom_type=True) and InterestingLookupModel.objects.filter(custom_type=True).order_by('-id')[0].condition_200_http_lookup:
         url_lookup_query &= Q(http_status__exact=200)
@@ -157,19 +154,17 @@ def send_telegram_message(message):
     and notification[0].telegram_bot_chat_id:
         telegram_bot_token = notification[0].telegram_bot_token
         telegram_bot_chat_id = notification[0].telegram_bot_chat_id
-        send_text = 'https://api.telegram.org/bot' + telegram_bot_token \
-            + '/sendMessage?chat_id=' + telegram_bot_chat_id \
-            + '&parse_mode=Markdown&text=' + message
+        send_text = f'https://api.telegram.org/bot{telegram_bot_token}/sendMessage?chat_id={telegram_bot_chat_id}&parse_mode=Markdown&text={message}'
         thread = Thread(target=requests.get, args = (send_text, ))
         thread.start()
 
 def send_slack_message(message):
-    headers = {'content-type': 'application/json'}
-    message = {'text': message}
     notification = Notification.objects.all()
     if notification and notification[0].send_to_slack \
     and notification[0].slack_hook_url:
         hook_url = notification[0].slack_hook_url
+        headers = {'content-type': 'application/json'}
+        message = {'text': message}
         thread = Thread(
             target=requests.post,
             kwargs = {
@@ -216,15 +211,11 @@ def get_random_proxy():
         proxy = Proxy.objects.all()[0]
         if proxy.use_proxy:
             proxy_name = random.choice(proxy.proxies.splitlines())
-            print('Using proxy: ' + proxy_name)
+            print(f'Using proxy: {proxy_name}')
             return proxy_name
     return False
 
 def send_hackerone_report(vulnerability_id):
-    headers = {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json'
-    }
     # get hackerone creds
     vulnerability = Vulnerability.objects.get(id=vulnerability_id)
     # can only send vulnerability report if team_handle exists
@@ -250,25 +241,40 @@ def send_hackerone_report(vulnerability_id):
             if '{vulnerability_severity}' in report_template:
                 report_template = report_template.replace('{vulnerability_severity}', severity_value)
             if '{vulnerability_description}' in report_template:
-                report_template = report_template.replace('{vulnerability_description}', vulnerability.description if vulnerability.description else '')
+                report_template = report_template.replace(
+                    '{vulnerability_description}',
+                    vulnerability.description or '',
+                )
             if '{vulnerability_extracted_results}' in report_template:
-                report_template = report_template.replace('{vulnerability_extracted_results}', vulnerability.extracted_results if vulnerability.extracted_results else '')
+                report_template = report_template.replace(
+                    '{vulnerability_extracted_results}',
+                    vulnerability.extracted_results or '',
+                )
             if '{vulnerability_reference}' in report_template:
-                report_template = report_template.replace('{vulnerability_reference}', vulnerability.reference if vulnerability.reference else '')
+                report_template = report_template.replace(
+                    '{vulnerability_reference}', vulnerability.reference or ''
+                )
 
             data = {
-              "data": {
-                "type": "report",
-                "attributes": {
-                  "team_handle": vulnerability.target_domain.h1_team_handle,
-                  "title": '{} found in {}'.format(vulnerability.name, vulnerability.http_url),
-                  "vulnerability_information": report_template,
-                  "severity_rating": severity_value,
-                  "impact": "More information about the impact and vulnerability can be found here: \n" + vulnerability.reference if vulnerability.reference else "NA",
+                "data": {
+                    "type": "report",
+                    "attributes": {
+                        "team_handle": vulnerability.target_domain.h1_team_handle,
+                        "title": f'{vulnerability.name} found in {vulnerability.http_url}',
+                        "vulnerability_information": report_template,
+                        "severity_rating": severity_value,
+                        "impact": "More information about the impact and vulnerability can be found here: \n"
+                        + vulnerability.reference
+                        if vulnerability.reference
+                        else "NA",
+                    },
                 }
-              }
             }
 
+            headers = {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+            }
             r = requests.post(
               'https://api.hackerone.com/v1/hackers/reports',
               auth=(hackerone.username, hackerone.api_key),
@@ -292,9 +298,7 @@ def send_hackerone_report(vulnerability_id):
 
     else:
         print('No target ')
-        status_code = 111
-
-        return status_code
+        return 111
 
 def get_whois_using_domainbigdata(ip_domain, save_db=False, fetch_from_db=True):
     # CURRENTLY DEPRECATED!!!!!!

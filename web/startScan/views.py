@@ -125,9 +125,10 @@ def detail_scan(request, id=None):
     return render(request, 'startScan/detail_scan.html', context)
 
 def all_subdomains(request):
-    context = {}
-    context['scan_history_id'] = id
-    context['subdomain_count'] = Subdomain.objects.values('name').distinct().count()
+    context = {
+        'scan_history_id': id,
+        'subdomain_count': Subdomain.objects.values('name').distinct().count(),
+    }
     context['alive_count'] = Subdomain.objects.values('name').distinct().filter(
         http_status__exact=200).count()
     context['important_count'] = Subdomain.objects.values('name').distinct().filter(
@@ -149,8 +150,7 @@ def detail_vuln_scan(request, id=None):
 
 
 def all_endpoints(request):
-    context = {}
-    context['scan_history_active'] = 'active'
+    context = {'scan_history_active': 'active'}
     return render(request, 'startScan/endpoints.html', context)
 
 
@@ -197,7 +197,6 @@ def start_scan_ui(request, domain_id):
 
 
 def start_multiple_scan(request):
-    # domain = get_object_or_404(Domain, id=host_id)
     if request.method == "POST":
         if request.POST.get('scan_mode', 0):
             # if scan mode is available, then start the scan
@@ -223,7 +222,10 @@ def start_multiple_scan(request):
             list_of_domain_name = []
             list_of_domain_id = []
             for key, value in request.POST.items():
-                if key != "list_target_table_length" and key != "csrfmiddlewaretoken":
+                if key not in [
+                    "list_target_table_length",
+                    "csrfmiddlewaretoken",
+                ]:
                     domain = get_object_or_404(Domain, id=value)
                     list_of_domain_name.append(domain.name)
                     list_of_domain_id.append(value)
@@ -283,7 +285,7 @@ def delete_scan(request, id):
     obj = get_object_or_404(ScanHistory, id=id)
     if request.method == "POST":
         delete_dir = obj.results_dir
-        os.system('rm -rf /usr/src/scan_results/' + delete_dir)
+        os.system(f'rm -rf /usr/src/scan_results/{delete_dir}')
         obj.delete()
         messageData = {'status': 'true'}
         messages.add_message(
@@ -338,27 +340,26 @@ def schedule_scan(request, host_id):
         # get engine type
         engine_type = int(request.POST['scan_mode'])
         engine_object = get_object_or_404(EngineType, id=engine_type)
-        task_name = engine_object.engine_name + ' for ' + \
-            domain.name + \
-            ':' + \
-            str(datetime.datetime.strftime(timezone.now(), '%Y_%m_%d_%H_%M_%S'))
+        task_name = f'{engine_object.engine_name} for {domain.name}:' + str(
+            datetime.datetime.strftime(timezone.now(), '%Y_%m_%d_%H_%M_%S')
+        )
         if request.POST['scheduled_mode'] == 'periodic':
             # periodic task
             frequency_value = int(request.POST['frequency'])
             frequency_type = request.POST['frequency_type']
-            if frequency_type == 'minutes':
-                period = IntervalSchedule.MINUTES
+            if frequency_type == 'days':
+                period = IntervalSchedule.DAYS
             elif frequency_type == 'hours':
                 period = IntervalSchedule.HOURS
-            elif frequency_type == 'days':
-                period = IntervalSchedule.DAYS
-            elif frequency_type == 'weeks':
-                period = IntervalSchedule.DAYS
-                frequency_value *= 7
+            elif frequency_type == 'minutes':
+                period = IntervalSchedule.MINUTES
             elif frequency_type == 'months':
                 period = IntervalSchedule.DAYS
                 frequency_value *= 30
 
+            elif frequency_type == 'weeks':
+                period = IntervalSchedule.DAYS
+                frequency_value *= 7
             schedule, created = IntervalSchedule.objects.get_or_create(
                 every=frequency_value,
                 period=period,)
@@ -510,10 +511,7 @@ def start_organization_scan(request, id):
         messages.add_message(
             request,
             messages.INFO,
-            'Scan Started for {} domains in organization {}'.format(
-                len(organization.get_domains()),
-                organization.name
-            )
+            f'Scan Started for {len(organization.get_domains())} domains in organization {organization.name}',
         )
         return HttpResponseRedirect(reverse('scan_history'))
     engine = EngineType.objects.order_by('id')
@@ -536,30 +534,31 @@ def schedule_organization_scan(request, id):
         engine_type = int(request.POST['scan_mode'])
         engine_object = get_object_or_404(EngineType, id=engine_type)
         for domain in organization.get_domains():
-            task_name = engine_object.engine_name + ' for ' + \
-                domain.name + \
-                ':' + \
-                str(datetime.datetime.strftime(
-                    timezone.now(),
-                    '%Y_%m_%d_%H_%M_%S'
-                ))
+            task_name = (
+                f'{engine_object.engine_name} for {domain.name}:'
+                + str(
+                    datetime.datetime.strftime(
+                        timezone.now(), '%Y_%m_%d_%H_%M_%S'
+                    )
+                )
+            )
             if request.POST['scheduled_mode'] == 'periodic':
                 # periodic task
                 frequency_value = int(request.POST['frequency'])
                 frequency_type = request.POST['frequency_type']
-                if frequency_type == 'minutes':
-                    period = IntervalSchedule.MINUTES
+                if frequency_type == 'days':
+                    period = IntervalSchedule.DAYS
                 elif frequency_type == 'hours':
                     period = IntervalSchedule.HOURS
-                elif frequency_type == 'days':
-                    period = IntervalSchedule.DAYS
-                elif frequency_type == 'weeks':
-                    period = IntervalSchedule.DAYS
-                    frequency_value *= 7
+                elif frequency_type == 'minutes':
+                    period = IntervalSchedule.MINUTES
                 elif frequency_type == 'months':
                     period = IntervalSchedule.DAYS
                     frequency_value *= 30
 
+                elif frequency_type == 'weeks':
+                    period = IntervalSchedule.DAYS
+                    frequency_value *= 7
                 schedule, created = IntervalSchedule.objects.get_or_create(
                     every=frequency_value,
                     period=period,)
@@ -594,10 +593,7 @@ def schedule_organization_scan(request, id):
         messages.add_message(
             request,
             messages.INFO,
-            'Scan Started for {} domains in organization {}'.format(
-                len(organization.get_domains()),
-                organization.name
-            )
+            f'Scan Started for {len(organization.get_domains())} domains in organization {organization.name}',
         )
         return HttpResponseRedirect(reverse('scheduled_scan_view'))
     engine = EngineType.objects
@@ -618,10 +614,10 @@ def delete_scans(request):
         list_of_scan_id = []
 
         for key, value in request.POST.items():
-            if key != "scan_history_table_length" and key != "csrfmiddlewaretoken":
+            if key not in ["scan_history_table_length", "csrfmiddlewaretoken"]:
                 obj = get_object_or_404(ScanHistory, id=value)
                 delete_dir = obj.results_dir
-                os.system('rm -rf /usr/src/scan_results/' + delete_dir)
+                os.system(f'rm -rf /usr/src/scan_results/{delete_dir}')
                 obj.delete()
         messages.add_message(
             request,
@@ -727,9 +723,8 @@ def create_report(request, id):
     html = template.render(data)
     pdf = HTML(string=html).write_pdf()
 
-    if 'download' in request.GET:
-        response = HttpResponse(pdf, content_type='application/octet-stream')
-    else:
-        response = HttpResponse(pdf, content_type='application/pdf')
-
-    return response
+    return (
+        HttpResponse(pdf, content_type='application/octet-stream')
+        if 'download' in request.GET
+        else HttpResponse(pdf, content_type='application/pdf')
+    )
