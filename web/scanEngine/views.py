@@ -94,30 +94,36 @@ def wordlist_list(request):
 
 
 def add_wordlist(request):
-    context = {'scan_engine_nav_active': 'active', 'wordlist_li': 'active'}
     form = AddWordlistForm(request.POST or None, request.FILES or None)
-    if request.method == "POST":
-        if form.is_valid() and 'upload_file' in request.FILES:
-            txt_file = request.FILES['upload_file']
-            if txt_file.content_type == 'text/plain':
-                wordlist_content = txt_file.read().decode('UTF-8', "ignore")
-                wordlist_file = open(
-                    '/usr/src/' +
-                    'wordlist/' +
-                    form.cleaned_data['short_name'] + '.txt',
-                    'w')
-                wordlist_file.write(wordlist_content)
-                Wordlist.objects.create(
-                    name=form.cleaned_data['name'],
-                    short_name=form.cleaned_data['short_name'],
-                    count=wordlist_content.count('\n'))
-                messages.add_message(
-                    request,
-                    messages.INFO,
-                    'Wordlist ' + form.cleaned_data['name'] +
-                    ' added successfully')
-                return http.HttpResponseRedirect(reverse('wordlist_list'))
-    context['form'] = form
+    if (
+        request.method == "POST"
+        and form.is_valid()
+        and 'upload_file' in request.FILES
+    ):
+        txt_file = request.FILES['upload_file']
+        if txt_file.content_type == 'text/plain':
+            wordlist_content = txt_file.read().decode('UTF-8', "ignore")
+            wordlist_file = open(
+                '/usr/src/' +
+                'wordlist/' +
+                form.cleaned_data['short_name'] + '.txt',
+                'w')
+            wordlist_file.write(wordlist_content)
+            Wordlist.objects.create(
+                name=form.cleaned_data['name'],
+                short_name=form.cleaned_data['short_name'],
+                count=wordlist_content.count('\n'))
+            messages.add_message(
+                request,
+                messages.INFO,
+                'Wordlist ' + form.cleaned_data['name'] +
+                ' added successfully')
+            return http.HttpResponseRedirect(reverse('wordlist_list'))
+    context = {
+        'scan_engine_nav_active': 'active',
+        'wordlist_li': 'active',
+        'form': form,
+    }
     return render(request, 'scanEngine/wordlist/add.html', context)
 
 
@@ -149,10 +155,11 @@ def delete_wordlist(request, id):
 
 def interesting_lookup(request):
     lookup_keywords = None
-    context = {}
-    context['scan_engine_nav_active'] = 'active'
-    context['interesting_lookup_li'] = 'active'
-    context['engine_ul_show'] = 'show'
+    context = {
+        'scan_engine_nav_active': 'active',
+        'interesting_lookup_li': 'active',
+        'engine_ul_show': 'show',
+    }
     form = InterestingLookupForm()
     if InterestingLookupModel.objects.filter(custom_type=True).exists():
         lookup_keywords = InterestingLookupModel.objects.filter(custom_type=True).order_by('-id')[0]
@@ -181,7 +188,6 @@ def interesting_lookup(request):
     return render(request, 'scanEngine/lookup.html', context)
 
 def tool_specific_settings(request):
-    context = {}
     # check for incoming form requests
     if request.method == "POST":
 
@@ -194,11 +200,14 @@ def tool_specific_settings(request):
             else:
                 # remove special chars from filename, that could possibly do directory traversal or XSS
                 filename = re.sub(r'[\\/*?:"<>|]',"", gf_file.name)
-                file_path = '/root/.gf/' + filename
-                file = open(file_path, "w")
-                file.write(gf_file.read().decode("utf-8"))
-                file.close()
-                messages.add_message(request, messages.INFO, 'Pattern {} successfully uploaded'.format(gf_file.name[:4]))
+                file_path = f'/root/.gf/{filename}'
+                with open(file_path, "w") as file:
+                    file.write(gf_file.read().decode("utf-8"))
+                messages.add_message(
+                    request,
+                    messages.INFO,
+                    f'Pattern {gf_file.name[:4]} successfully uploaded',
+                )
             return http.HttpResponseRedirect(reverse('tool_settings'))
 
         elif 'nucleiFileUpload' in request.FILES:
@@ -208,11 +217,14 @@ def tool_specific_settings(request):
                 messages.add_message(request, messages.ERROR, 'Invalid Nuclei Pattern, upload only *.yaml extension')
             else:
                 filename = re.sub(r'[\\/*?:"<>|]',"", nuclei_file.name)
-                file_path = '/root/nuclei-templates/' + filename
-                file = open(file_path, "w")
-                file.write(nuclei_file.read().decode("utf-8"))
-                file.close()
-                messages.add_message(request, messages.INFO, 'Nuclei Pattern {} successfully uploaded'.format(nuclei_file.name[:-5]))
+                file_path = f'/root/nuclei-templates/{filename}'
+                with open(file_path, "w") as file:
+                    file.write(nuclei_file.read().decode("utf-8"))
+                messages.add_message(
+                    request,
+                    messages.INFO,
+                    f'Nuclei Pattern {nuclei_file.name[:-5]} successfully uploaded',
+                )
             return http.HttpResponseRedirect(reverse('tool_settings'))
 
         elif 'nuclei_config_text_area' in request.POST:
@@ -238,41 +250,40 @@ def tool_specific_settings(request):
                 fhandle.write(request.POST.get('amass_config_text_area'))
             messages.add_message(request, messages.INFO, 'Amass config updated!')
             return http.HttpResponseRedirect(reverse('tool_settings'))
-        
+
         elif 'theharvester_config_text_area' in request.POST:
             with open('/usr/src/github/theHarvester/api-keys.yaml', "w") as fhandle:
                 fhandle.write(request.POST.get('theharvester_config_text_area'))
             messages.add_message(request, messages.INFO, 'theHarvester config updated!')
             return http.HttpResponseRedirect(reverse('tool_settings'))
 
-    context['settings_nav_active'] = 'active'
-    context['tool_settings_li'] = 'active'
-    context['settings_ul_show'] = 'show'
     gf_list = (subprocess.check_output(['gf', '-list'])).decode("utf-8")
-    nuclei_custom_pattern = [f for f in glob.glob("/root/nuclei-templates/*.yaml")]
-    context['nuclei_templates'] = nuclei_custom_pattern
-    context['gf_patterns'] = sorted(gf_list.split('\n'))
+    nuclei_custom_pattern = list(glob.glob("/root/nuclei-templates/*.yaml"))
+    context = {
+        'settings_nav_active': 'active',
+        'tool_settings_li': 'active',
+        'settings_ul_show': 'show',
+        'nuclei_templates': nuclei_custom_pattern,
+        'gf_patterns': sorted(gf_list.split('\n')),
+    }
     return render(request, 'scanEngine/settings/tool.html', context)
 
 def rengine_settings(request):
-    context = {}
-
     total, used, _ = shutil.disk_usage("/")
     total = total // (2**30)
     used = used // (2**30)
-    context['total'] = total
-    context['used'] = used
-    context['free'] = total-used
-    context['consumed_percent'] = int(100 * float(used)/float(total))
-
-    context['settings_nav_active'] = 'active'
-    context['rengine_settings_li'] = 'active'
-    context['settings_ul_show'] = 'show'
-
+    context = {
+        'total': total,
+        'used': used,
+        'free': total - used,
+        'consumed_percent': int(100 * float(used) / float(total)),
+        'settings_nav_active': 'active',
+        'rengine_settings_li': 'active',
+        'settings_ul_show': 'show',
+    }
     return render(request, 'scanEngine/settings/rengine.html', context)
 
 def notification_settings(request):
-    context = {}
     form = NotificationForm()
     notification = None
     if Notification.objects.all().exists():
@@ -298,18 +309,17 @@ def notification_settings(request):
                 'Notification Settings updated successfully and test message was sent.')
             return http.HttpResponseRedirect(reverse('notification_settings'))
 
-    context['settings_nav_active'] = 'active'
-    context['notification_settings_li'] = 'active'
-    context['settings_ul_show'] = 'show'
-    context['form'] = form
-
+    context = {
+        'settings_nav_active': 'active',
+        'notification_settings_li': 'active',
+        'settings_ul_show': 'show',
+        'form': form,
+    }
     return render(request, 'scanEngine/settings/notification.html', context)
 
 def proxy_settings(request):
-    context = {}
     form = ProxyForm()
-    context['form'] = form
-
+    context = {'form': form}
     proxy = None
     if Proxy.objects.all().exists():
         proxy = Proxy.objects.all()[0]
@@ -358,10 +368,8 @@ def test_hackerone(request):
 
 
 def hackerone_settings(request):
-    context = {}
     form = HackeroneForm()
-    context['form'] = form
-
+    context = {'form': form}
     hackerone = None
     if Hackerone.objects.all().exists():
         hackerone = Hackerone.objects.all()[0]
@@ -392,10 +400,8 @@ def hackerone_settings(request):
 
 
 def report_settings(request):
-    context = {}
     form = ReportForm()
-    context['form'] = form
-
+    context = {'form': form}
     primary_color = '#FFB74D'
     secondary_color = '#212121'
 
@@ -433,9 +439,8 @@ def report_settings(request):
 
 
 def tool_arsenal_section(request):
-    context = {}
     tools = InstalledExternalTool.objects.all().order_by('id')
-    context['installed_tools'] = tools
+    context = {'installed_tools': tools}
     return render(request, 'scanEngine/settings/tool_arsenal.html', context)
 
 
@@ -450,10 +455,10 @@ def add_tool(request):
             github_clone_path = None
             if 'git clone' in install_command:
                 project_name = install_command.split('/')[-1]
-                install_command = install_command + ' /usr/src/github/' + project_name + ' && pip install -r /usr/src/github/' + project_name + '/requirements.txt'
-                github_clone_path = '/usr/src/github/' + project_name
+                install_command = f'{install_command} /usr/src/github/{project_name} && pip install -r /usr/src/github/{project_name}/requirements.txt'
+                github_clone_path = f'/usr/src/github/{project_name}'
                 # if github cloned we also need to install requirements, atleast found in the main dir
-                install_command = 'pip3 install -r /usr/src/github/' + project_name + '/requirements.txt'
+                install_command = f'pip3 install -r /usr/src/github/{project_name}/requirements.txt'
 
             os.system(install_command)
             run_system_commands.apply_async(args=(install_command,))

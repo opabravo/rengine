@@ -18,7 +18,7 @@ def count(value):
 def getpath(value):
     parsed_url = urlparse(value)
     if parsed_url.query:
-        return parsed_url.path + '?' + parsed_url.query
+        return f'{parsed_url.path}?{parsed_url.query}'
     else:
         return parsed_url.path
 

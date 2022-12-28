@@ -97,7 +97,7 @@ def initiate_subtask(
 	sub_scan.engine = engine
 	sub_scan.save()
 
-	results_dir = '/usr/src/scan_results/' + scan_history.results_dir
+	results_dir = f'/usr/src/scan_results/{scan_history.results_dir}'
 
 	# if not results_dir exists, create one
 	if not os.path.exists(results_dir):
@@ -115,7 +115,7 @@ def initiate_subtask(
 		if port_scan:
 			# delete any existing ports.json
 			rand_name = str(time.time()).split('.')[0]
-			file_name = 'ports_{}_{}.json'.format(subdomain.name, rand_name)
+			file_name = f'ports_{subdomain.name}_{rand_name}.json'
 			scan_history.port_scan = True
 			scan_history.save()
 			port_scanning(
@@ -129,7 +129,7 @@ def initiate_subtask(
 			)
 		elif dir_fuzz:
 			rand_name = str(time.time()).split('.')[0]
-			file_name = 'dir_fuzz_{}_{}.json'.format(subdomain.name, rand_name)
+			file_name = f'dir_fuzz_{subdomain.name}_{rand_name}.json'
 			scan_history.dir_file_fuzz = True
 			scan_history.save()
 			directory_fuzz(
@@ -143,7 +143,7 @@ def initiate_subtask(
 			)
 		elif endpoint:
 			rand_name = str(time.time()).split('.')[0]
-			file_name = 'endpoints_{}_{}.txt'.format(subdomain.name, rand_name)
+			file_name = f'endpoints_{subdomain.name}_{rand_name}.txt'
 			scan_history.fetch_url = True
 			scan_history.save()
 			fetch_endpoints(
@@ -157,7 +157,7 @@ def initiate_subtask(
 			)
 		elif vuln_scan:
 			rand_name = str(time.time()).split('.')[0]
-			file_name = 'vuln_{}_{}.txt'.format(subdomain.name, rand_name)
+			file_name = f'vuln_{subdomain.name}_{rand_name}.txt'
 			scan_history.vulnerability_scan = True
 			scan_history.save()
 			vulnerability_scan(

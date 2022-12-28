@@ -55,8 +55,12 @@ def add_target(request):
             domains = request.POST.getlist('resolved_ip_domains')
             description = request.POST['targetDescription'] if 'targetDescription' in request.POST else ''
             ip_address_cidr = request.POST['ip_address'] if 'ip_address' in request.POST else ''
-            h1_team_handle = request.POST['targetH1TeamHandle'] if 'targetH1TeamHandle' in request.POST else None
             added_target_count = 0
+            h1_team_handle = (
+                request.POST['targetH1TeamHandle']
+                if 'targetH1TeamHandle' in request.POST
+                else None
+            )
             for domain in domains:
                 if not Domain.objects.filter(
                         name=domain).exists() and validators.domain(domain):
@@ -68,8 +72,11 @@ def add_target(request):
                         insert_date=timezone.now())
                     added_target_count += 1
             if added_target_count:
-                messages.add_message(request, messages.SUCCESS, str(
-                    added_target_count) + ' targets added successfully!')
+                messages.add_message(
+                    request,
+                    messages.SUCCESS,
+                    f'{str(added_target_count)} targets added successfully!',
+                )
                 return http.HttpResponseRedirect(reverse('list_target'))
             else:
                 messages.add_message(
@@ -107,9 +114,9 @@ def add_target(request):
             if 'txtFile' in request.FILES:
                 txt_file = request.FILES['txtFile']
                 if txt_file.content_type == 'text/plain':
-                    target_count = 0
                     txt_content = txt_file.read().decode('UTF-8')
                     io_string = io.StringIO(txt_content)
+                    target_count = 0
                     for target in io_string:
                         target_domain = target.rstrip("\n").rstrip("\r")
                         if not Domain.objects.filter(
@@ -119,8 +126,11 @@ def add_target(request):
                                 insert_date=timezone.now())
                             target_count += 1
                     if target_count:
-                        messages.add_message(request, messages.SUCCESS, str(
-                            target_count) + ' targets added successfully!')
+                        messages.add_message(
+                            request,
+                            messages.SUCCESS,
+                            f'{str(target_count)} targets added successfully!',
+                        )
                     else:
                         messages.add_message(
                             request,
@@ -134,9 +144,9 @@ def add_target(request):
             elif 'csvFile' in request.FILES:
                 csv_file = request.FILES['csvFile']
                 if csv_file.content_type == 'text/csv' or csv_file.name.split('.')[1]:
-                    target_count = 0
                     csv_content = csv_file.read().decode('UTF-8')
                     io_string = io.StringIO(csv_content)
+                    target_count = 0
                     for column in csv.reader(io_string, delimiter=','):
                         target_domain = column[0]
                         description = None if len(column) == 1 else column[1]
@@ -149,8 +159,11 @@ def add_target(request):
                                 insert_date=timezone.now())
                             target_count += 1
                     if target_count:
-                        messages.add_message(request, messages.SUCCESS, str(
-                            target_count) + ' targets added successfully!')
+                        messages.add_message(
+                            request,
+                            messages.SUCCESS,
+                            f'{str(target_count)} targets added successfully!',
+                        )
                     else:
                         messages.add_message(
                             request,
@@ -204,7 +217,7 @@ def delete_targets(request):
     if request.method == "POST":
         list_of_domains = []
         for key, value in request.POST.items():
-            if key != "list_target_table_length" and key != "csrfmiddlewaretoken":
+            if key not in ["list_target_table_length", "csrfmiddlewaretoken"]:
                 Domain.objects.filter(id=value).delete()
         messages.add_message(
             request,
@@ -220,10 +233,7 @@ def update_target(request, id):
         form = UpdateTargetForm(request.POST, instance=domain)
         if form.is_valid():
             form.save()
-            messages.add_message(
-                request,
-                messages.INFO,
-                'Domain {} modified!'.format(domain.name))
+            messages.add_message(request, messages.INFO, f'Domain {domain.name} modified!')
             return http.HttpResponseRedirect(reverse('list_target'))
     else:
         form.set_value(domain.name, domain.description, domain.h1_team_handle)
@@ -235,11 +245,11 @@ def update_target(request, id):
     return render(request, 'target/update.html', context)
 
 def target_summary(request, id):
-    context = {}
     target = get_object_or_404(Domain, id=id)
-    context['target'] = target
-    context['scan_count'] = ScanHistory.objects.filter(
-        domain_id=id).count()
+    context = {
+        'target': target,
+        'scan_count': ScanHistory.objects.filter(domain_id=id).count(),
+    }
     last_week = timezone.now() - timedelta(days=7)
     context['this_week_scan_count'] = ScanHistory.objects.filter(
         domain_id=id, start_scan_date__gte=last_week).count()
@@ -377,7 +387,8 @@ def update_organization(request, id):
             messages.add_message(
                 request,
                 messages.INFO,
-                'Organization {} modified!'.format(organization.name))
+                f'Organization {organization.name} modified!',
+            )
             return http.HttpResponseRedirect(reverse('list_organization'))
     else:
         domain_list = organization.get_domains().values_list('id', flat=True)

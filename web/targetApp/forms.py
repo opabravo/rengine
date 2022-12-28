@@ -36,7 +36,7 @@ class AddTargetForm(forms.Form):
     def clean_name(self):
         data = self.cleaned_data['name']
         if Domain.objects.filter(name=data).count() > 0:
-            raise forms.ValidationError("{} target/domain already exists".format(data))
+            raise forms.ValidationError(f"{data} target/domain already exists")
         return data
 
 
@@ -82,7 +82,7 @@ class AddOrganizationForm(forms.Form):
     def clean_name(self):
         data = self.cleaned_data['name']
         if Organization.objects.filter(name=data).count() > 0:
-            raise forms.ValidationError("{} Organization already exists".format(data))
+            raise forms.ValidationError(f"{data} Organization already exists")
         return data
 
 

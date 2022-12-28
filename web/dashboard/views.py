@@ -66,8 +66,7 @@ def index(request):
         date=TruncDay('discovered_date')).values("date").annotate(
             count=Count('id')).order_by("-date")
 
-    last_7_dates = [(timezone.now() - timedelta(days=i)).date()
-                    for i in range(0, 7)]
+    last_7_dates = [(timezone.now() - timedelta(days=i)).date() for i in range(7)]
 
     targets_in_last_week = []
     subdomains_in_last_week = []
@@ -134,9 +133,9 @@ def index(request):
         'scans_in_last_week': scans_in_last_week,
         'endpoints_in_last_week': endpoints_in_last_week,
         'last_7_dates': last_7_dates,
+        'total_ips': IpAddress.objects.all().count(),
     }
 
-    context['total_ips'] = IpAddress.objects.all().count()
     context['most_used_port'] = Port.objects.annotate(count=Count('ports')).order_by('-count')[:7]
     context['most_used_ip'] = IpAddress.objects.annotate(count=Count('ip_addresses')).order_by('-count').exclude(ip_addresses__isnull=True)[:7]
     context['most_used_tech'] = Technology.objects.annotate(count=Count('technologies')).order_by('-count')[:7]

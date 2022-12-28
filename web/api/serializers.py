@@ -99,9 +99,7 @@ class SubScanResultSerializer(serializers.ModelSerializer):
 			return 'Unknown'
 
 	def get_engine_name(self, subscan):
-		if subscan.engine:
-			return subscan.engine.engine_name
-		return ''
+		return subscan.engine.engine_name if subscan.engine else ''
 
 
 class ReconNoteSerializer(serializers.ModelSerializer):
@@ -158,9 +156,7 @@ class SubScanSerializer(serializers.ModelSerializer):
 		return sub_scan.get_completed_ago()
 
 	def get_engine_name(self, sub_scan):
-		if sub_scan.engine:
-			return sub_scan.engine.engine_name
-		return ''
+		return sub_scan.engine.engine_name if sub_scan.engine else ''
 
 
 class ScanHistorySerializer(serializers.ModelSerializer):
@@ -259,7 +255,7 @@ class VisualisePortSerializer(serializers.ModelSerializer):
 		]
 
 	def get_description(self, port):
-		return str(port.number) + "/" + str(port.service_name)
+		return f"{str(port.number)}/{str(port.service_name)}"
 
 	def get_title(self, port):
 		if port.is_uncommon:
@@ -379,8 +375,7 @@ class VisualiseSubdomainSerializer(serializers.ModelSerializer):
 
 		if vulnerability:
 			vulnerability_data = []
-			critical = vulnerability.filter(severity=4)
-			if critical:
+			if critical := vulnerability.filter(severity=4):
 				critical_serializer = VisualiseVulnerabilitySerializer(
 					critical,
 					many=True
@@ -389,8 +384,7 @@ class VisualiseSubdomainSerializer(serializers.ModelSerializer):
 					'description': 'Critical',
 					'children': critical_serializer.data
 				})
-			high = vulnerability.filter(severity=3)
-			if high:
+			if high := vulnerability.filter(severity=3):
 				high_serializer = VisualiseVulnerabilitySerializer(
 					high,
 					many=True
@@ -399,8 +393,7 @@ class VisualiseSubdomainSerializer(serializers.ModelSerializer):
 					'description': 'High',
 					'children': high_serializer.data
 				})
-			medium = vulnerability.filter(severity=2)
-			if medium:
+			if medium := vulnerability.filter(severity=2):
 				medium_serializer = VisualiseVulnerabilitySerializer(
 					medium,
 					many=True
@@ -409,8 +402,7 @@ class VisualiseSubdomainSerializer(serializers.ModelSerializer):
 					'description': 'Medium',
 					'children': medium_serializer.data
 				})
-			low = vulnerability.filter(severity=1)
-			if low:
+			if low := vulnerability.filter(severity=1):
 				low_serializer = VisualiseVulnerabilitySerializer(
 					low,
 					many=True
@@ -419,8 +411,7 @@ class VisualiseSubdomainSerializer(serializers.ModelSerializer):
 					'description': 'Low',
 					'children': low_serializer.data
 				})
-			info = vulnerability.filter(severity=0)
-			if info:
+			if info := vulnerability.filter(severity=0):
 				info_serializer = VisualiseVulnerabilitySerializer(
 					info,
 					many=True
@@ -429,8 +420,7 @@ class VisualiseSubdomainSerializer(serializers.ModelSerializer):
 					'description': 'Informational',
 					'children': info_serializer.data
 				})
-			uknown = vulnerability.filter(severity=-1)
-			if uknown:
+			if uknown := vulnerability.filter(severity=-1):
 				uknown_serializer = VisualiseVulnerabilitySerializer(
 					uknown,
 					many=True
@@ -468,7 +458,7 @@ class VisualiseEmailSerializer(serializers.ModelSerializer):
 
 	def get_description(self, email):
 		if email.password:
-			return email.address + " > " + email.password
+			return f"{email.address} > {email.password}"
 		return email.address
 
 	def get_title(self, email):
@@ -512,7 +502,7 @@ class VisualiseEmployeeSerializer(serializers.ModelSerializer):
 
 	def get_description(self, employee):
 		if employee.designation:
-			return employee.name + '--' + employee.designation
+			return f'{employee.name}--{employee.designation}'
 		return employee.name
 
 
@@ -569,34 +559,31 @@ class VisualiseDataSerializer(serializers.ModelSerializer):
 
 			if metainfo:
 				metainfo_data = []
-				usernames = metainfo.annotate(
-					description=F('author')
-				).values('description').distinct().annotate(
-					children=Value(
-						[], output_field=JSONField())
-					).filter(author__isnull=False)
-
-				if usernames:
+				if (
+					usernames := metainfo.annotate(description=F('author'))
+					.values('description')
+					.distinct()
+					.annotate(children=Value([], output_field=JSONField()))
+					.filter(author__isnull=False)
+				):
 					metainfo_data.append({'description': 'Usernames', 'children': usernames})
 
-				software = metainfo.annotate(
-					description=F('producer')
-				).values('description').distinct().annotate(
-					children=Value(
-						[], output_field=JSONField())
-					).filter(producer__isnull=False)
-
-				if software:
+				if (
+					software := metainfo.annotate(description=F('producer'))
+					.values('description')
+					.distinct()
+					.annotate(children=Value([], output_field=JSONField()))
+					.filter(producer__isnull=False)
+				):
 					metainfo_data.append({'description': 'Software', 'children': software})
 
-				os = metainfo.annotate(
-					description=F('os')
-				).values('description').distinct().annotate(
-					children=Value(
-						[], output_field=JSONField())
-					).filter(os__isnull=False)
-
-				if os:
+				if (
+					os := metainfo.annotate(description=F('os'))
+					.values('description')
+					.distinct()
+					.annotate(children=Value([], output_field=JSONField()))
+					.filter(os__isnull=False)
+				):
 					metainfo_data.append({'description': 'OS', 'children': os})
 
 			if metainfo:
@@ -855,8 +842,6 @@ class VulnerabilitySerializer(serializers.ModelSerializer):
 			return "High"
 		elif Vulnerability.severity == 4:
 			return "Critical"
-		elif Vulnerability.severity == -1:
-			return "Unknown"
 		else:
 			return "Unknown"
 
